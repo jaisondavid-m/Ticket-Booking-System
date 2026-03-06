@@ -1,0 +1,70 @@
+# docker-compose.yml
+services:
+
+  # ── Nginx load balancer ──────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - gateway_1
+      - gateway_2
+      - inventory_1
+      - inventory_2
+      - booking_1
+      - booking_2
+    networks:
+      - ticket-net
+
+  # ── Gateway (x2) ────────────────────────────────────────────
+  gateway_1:
+    build: ./gateway
+    environment:
+      - INVENTORY_URL=http://nginx/          # goes back through nginx
+      - BOOKING_URL=http://nginx/
+    networks:
+      - ticket-net
+
+  gateway_2:
+    build: ./gateway
+    environment:
+      - INVENTORY_URL=http://nginx/
+      - BOOKING_URL=http://nginx/
+    networks:
+      - ticket-net
+
+  # ── Inventory service (x2) ──────────────────────────────────
+  inventory_1:
+    build: ./inventory-service
+    environment:
+      - DB_DSN=${INVENTORY_DB_DSN}
+    networks:
+      - ticket-net
+
+  inventory_2:
+    build: ./inventory-service
+    environment:
+      - DB_DSN=${INVENTORY_DB_DSN}
+    networks:
+      - ticket-net
+
+  # ── Booking service (x2) ────────────────────────────────────
+  booking_1:
+    build: ./booking-service
+    environment:
+      - DB_DSN=${BOOKING_DB_DSN}
+    networks:
+      - ticket-net
+
+  booking_2:
+    build: ./booking-service
+    environment:
+      - DB_DSN=${BOOKING_DB_DSN}
+    networks:
+      - ticket-net
+
+networks:
+  ticket-net:
+    driver: bridge
