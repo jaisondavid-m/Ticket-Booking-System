@@ -12,31 +12,33 @@ import (
 type BookRequest struct {
 	Name string `json:"name"`
 }
+
 func inventoryURL() string {
 	if v := os.Getenv("INVENTORY_URL"); v != "" {
 		return v
 	}
-	return "http://localhost:8081"
+	return "http://nginx"
 }
 
 func bookingURL() string {
 	if v := os.Getenv("BOOKING_URL"); v != "" {
 		return v
 	}
-	return "http://localhost:8082"
+	return "http://nginx"
 }
 
-func BookTicket(c *gin.Context){
+func BookTicket(c *gin.Context) {
 	var req BookRequest
-	if err:=c.ShouldBindJSON(&req);err!=nil || req.Name == ""{
-		c.JSON(http.StatusBadRequest,gin.H{"error":"name required"})
+	if err := c.ShouldBindJSON(&req); err != nil || req.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
-	//Reserve Ticket (atomic in inventory service)
-	reserveResp,err:=http.Post(
-		inventoryURL()+"/api/reserve","application/json",nil,
+
+	// Reserve ticket (atomic in inventory service)
+	reserveResp, err := http.Post(
+		inventoryURL()+"/api/reserve", "application/json", nil,
 	)
-	if err!=nil{
+	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "inventory service unreachable"})
 		return
 	}
@@ -51,18 +53,20 @@ func BookTicket(c *gin.Context){
 		return
 	}
 
-	//Create booking record
+	// Create booking record
 	payload, _ := json.Marshal(map[string]string{"name": req.Name})
-	bookResp,err:=http.Post(
+	bookResp, err := http.Post(
 		bookingURL()+"/api/bookings",
 		"application/json",
 		bytes.NewBuffer(payload),
-	)	
-	if err!=nil || bookResp.StatusCode != http.StatusCreated {
+	)
+	if err != nil || bookResp.StatusCode != http.StatusCreated {
+		// Rollback reservation
 		http.Post(inventoryURL()+"/api/release", "application/json", nil)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "booking failed, reservation rolled back"})
 		return
 	}
 	defer bookResp.Body.Close()
-	c.JSON(http.StatusOK,gin.H{"message":"Ticket Booked Successfully"})
+
+	c.JSON(http.StatusOK, gin.H{"message": "Ticket Booked Successfully"})
 }
