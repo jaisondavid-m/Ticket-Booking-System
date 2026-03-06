@@ -1,10 +1,11 @@
 package routes
+
 import (
+	"inventory-service/handlers"
 	"github.com/gin-gonic/gin"
-	"server/handlers"
 )
 
 func RegisterRoutes(r *gin.Engine){
 	api := r.Group("/api")
-	api.POST("/book",handlers.BookTicket)
+	api.POST("/reserve",handlers.Reserve)
 }

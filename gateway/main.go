@@ -1,13 +1,11 @@
 package main
 
 import (
+	"gateway/routes"
 	"github.com/gin-gonic/gin"
-	"server/config"
-	"server/routes"
 )
 
-func main(){
-	config.Connect()
+func main() {
 	r := gin.Default()
 	routes.RegisterRoutes(r)
 	r.Run(":8000")
