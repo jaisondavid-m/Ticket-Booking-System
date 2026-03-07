@@ -11,9 +11,6 @@ var Client *redis.ClusterClient
 
 func InitCluster(){
 	addrs := os.Getenv("REDIS_CLUSTER_ADDRS")
-	if addrs == "" {
-		addrs = "redis1:6379,redis2:6379,redis3:6379"
-	}
 	nodes:=splitAddrs(addrs)
 	Client = redis.NewClusterClient(&redis.ClusterOptions{
 		Addrs: nodes,
