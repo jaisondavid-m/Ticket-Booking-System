@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(r *gin.Engine, rl *middleware.RateLimiter) {
+func RegisterRoutes(r *gin.Engine, rl int) {
 
 	r.Use(middleware.Logger())
 	r.Use(middleware.RateLimit(rl))

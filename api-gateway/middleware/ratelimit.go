@@ -2,93 +2,55 @@
 package middleware
 
 import (
+	"context"
+	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
+	sharedcache "shared/cache"
 )
 
-// bucket holds the token bucket state per IP
-type bucket struct {
-	tokens   float64
-	lastSeen time.Time
-	mu       sync.Mutex
-}
+// Sliding window rate limit using Redis sorted sets
+// Accurate, distributed, handles burst correctly
+var rateLimitScript = redis.NewScript(`
+	local key     = KEYS[1]
+	local now     = tonumber(ARGV[1])
+	local window  = tonumber(ARGV[2])
+	local limit   = tonumber(ARGV[3])
+	local clearBefore = now - window
 
-type RateLimiter struct {
-	buckets  map[string]*bucket
-	mu       sync.RWMutex
-	rate     float64 // tokens added per second
-	capacity float64 // max burst size
-}
+	redis.call("ZREMRANGEBYSCORE", key, "-inf", clearBefore)
+	local count = redis.call("ZCARD", key)
 
-func NewRateLimiter(requestsPerSecond, burst float64) *RateLimiter {
-	rl := &RateLimiter{
-		buckets:  make(map[string]*bucket),
-		rate:     requestsPerSecond,
-		capacity: burst,
-	}
-	// Background cleanup — remove buckets idle for 5 minutes
-	go rl.cleanup()
-	return rl
-}
+	if count < limit then
+		redis.call("ZADD", key, now, now .. "-" .. math.random(1,1000000))
+		redis.call("EXPIRE", key, math.ceil(window / 1000))
+		return 1   -- allowed
+	end
+	return 0       -- blocked
+`)
 
-func (rl *RateLimiter) allow(ip string) bool {
-	rl.mu.RLock()
-	b, exists := rl.buckets[ip]
-	rl.mu.RUnlock()
-
-	if !exists {
-		rl.mu.Lock()
-		b = &bucket{tokens: rl.capacity, lastSeen: time.Now()}
-		rl.buckets[ip] = b
-		rl.mu.Unlock()
-	}
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
-	now := time.Now()
-	elapsed := now.Sub(b.lastSeen).Seconds()
-	b.lastSeen = now
-
-	// Refill tokens based on elapsed time
-	b.tokens = min(rl.capacity, b.tokens+elapsed*rl.rate)
-
-	if b.tokens < 1 {
-		return false
-	}
-	b.tokens--
-	return true
-}
-
-func (rl *RateLimiter) cleanup() {
-	ticker := time.NewTicker(5 * time.Minute)
-	for range ticker.C {
-		rl.mu.Lock()
-		for ip, b := range rl.buckets {
-			b.mu.Lock()
-			if time.Since(b.lastSeen) > 5*time.Minute {
-				delete(rl.buckets, ip)
-			}
-			b.mu.Unlock()
-		}
-		rl.mu.Unlock()
-	}
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func RateLimit(rl *RateLimiter) gin.HandlerFunc {
+func RateLimit(requestsPerSecond int) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := context.Background()
 		ip := c.ClientIP()
-		if !rl.allow(ip) {
+		key := fmt.Sprintf("rl:%s", ip)
+
+		nowMs := time.Now().UnixMilli()
+		windowMs := int64(1000) // 1 second window
+
+		result, err := rateLimitScript.Run(
+			ctx,
+			sharedcache.Client,
+			[]string{key},
+			nowMs,
+			windowMs,
+			requestsPerSecond,
+		).Int()
+
+		if err != nil || result == 0 {
 			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
 				"error": "rate limit exceeded",
 			})

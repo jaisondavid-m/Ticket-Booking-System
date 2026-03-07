@@ -1,4 +1,5 @@
-# docker-compose.yml
+version: "3.9"
+
 services:
 
   # ── Nginx load balancer ──────────────────────────────────────
@@ -37,6 +38,7 @@ services:
     networks:
       - ticket-net
 
+
   # ── Inventory service (x2) ──────────────────────────────────
   inventory_1:
     build: ./inventory-service
@@ -52,6 +54,7 @@ services:
     networks:
       - ticket-net
 
+
   # ── Booking service (x2) ────────────────────────────────────
   booking_1:
     build: ./booking-service
@@ -66,6 +69,70 @@ services:
       - DB_DSN=${BOOKING_DB_DSN}
     networks:
       - ticket-net
+
+
+  # ── Redis Cluster ───────────────────────────────────────────
+  redis1:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    networks:
+      - ticket-net
+
+  redis2:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6380:6379"
+    networks:
+      - ticket-net
+
+  redis3:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --cluster-enabled yes
+      --cluster-config-file nodes.conf
+      --cluster-node-timeout 5000
+      --appendonly yes
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+    ports:
+      - "6381:6379"
+    networks:
+      - ticket-net
+
+
+  redis-cluster-init:
+    image: redis:7-alpine
+    depends_on:
+      - redis1
+      - redis2
+      - redis3
+    command: >
+      sh -c "sleep 5 &&
+      redis-cli --cluster create
+      redis1:6379 redis2:6379 redis3:6379
+      --cluster-replicas 0 --cluster-yes"
+    restart: "no"
+    networks:
+      - ticket-net
+
 
 networks:
   ticket-net:

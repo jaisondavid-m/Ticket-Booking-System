@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 
-	"api-gateway/middleware"
 	"api-gateway/routes"
 
 	"github.com/gin-gonic/gin"
@@ -19,7 +18,7 @@ func main() {
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	rl := middleware.NewRateLimiter(10, 20)
+	rl := 10
 
 	r := gin.New()
 
