@@ -16,5 +16,6 @@ func RegisterRoutes(r *gin.Engine, rl int) {
 	api.Use(middleware.Auth())
 	{
 		api.POST("/book", handlers.BookTicket)
+		api.GET("/booking/status/:key", handlers.BookingStatus)
 	}
 }

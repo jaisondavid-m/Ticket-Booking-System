@@ -11,15 +11,15 @@ import (
 
 func Auth() gin.HandlerFunc {
 	secret := os.Getenv("JWT_SECRET")
-	return func(c *gin.Context){
+	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
-		if header == "" || !strings.HasPrefix(header,"Bearer "){
-			c.AbortWithStatusJSON(http.StatusUnauthorized,gin.H{"error":"missing token"})
+		if header == "" || !strings.HasPrefix(header, "Bearer ") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing token"})
 			return
 		}
-		tokenStr := strings.TrimPrefix(header,"Bearer ")
-		token,err := jwt.Parse(tokenStr,func(t *jwt.Token)(interface{}, error){
-			if _,ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		tokenStr := strings.TrimPrefix(header, "Bearer ")
+		token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return []byte(secret), nil
@@ -31,11 +31,21 @@ func Auth() gin.HandlerFunc {
 
 		//an identify the authenticated user without parsing the JWT again.
 		claims, ok := token.Claims.(jwt.MapClaims)
-		if ok {
-			if userID, exists := claims["sub"]; exists {
-				c.Request.Header.Set("X-User-ID", userID.(string))
-			}
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid claims"})
+			return
 		}
+		userID, exists := claims["sub"]
+		if !exists {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing user ID in token"})
+			return
+		}
+		userIDStr, ok := userID.(string)
+		if !ok || userIDStr == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid user ID in token"})
+			return
+		}
+		c.Request.Header.Set("X-User-ID", userIDStr)
 
 		c.Next()
 	}

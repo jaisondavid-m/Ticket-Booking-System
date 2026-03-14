@@ -1,36 +1,38 @@
 package cache
 
 import (
+	"context"
+	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-var Client *redis.ClusterClient
+var Client *redis.Client
 
-func InitCluster(){
-	addrs := os.Getenv("REDIS_CLUSTER_ADDRS")
-	nodes:=splitAddrs(addrs)
-	Client = redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs: nodes,
-		PoolSize: 200,
-		MinIdleConns:  50,
-		DialTimeout:   2 * time.Second,
-		ReadTimeout:   1 * time.Second,
-		WriteTimeout:  1 * time.Second,
-		RouteRandomly: false,
-		RouteByLatency: true,
+func InitRedis() {
+	addr := os.Getenv("REDIS_ADDR")
+	if addr == "" {
+		addr = "redis:6379"
+	}
+	Client = redis.NewClient(&redis.Options{
+		Addr:         addr,
+		PoolSize:     200,
+		MinIdleConns: 50,
+		DialTimeout:  2 * time.Second,
+		ReadTimeout:  1 * time.Second,
+		WriteTimeout: 1 * time.Second,
 	})
-}
-func splitAddrs(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			out = append(out, s[start:i])
-			start = i + 1
+
+	initial := int64(100)
+	if raw := os.Getenv("TICKETS_INITIAL_COUNT"); raw != "" {
+		if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil && parsed >= 0 {
+			initial = parsed
 		}
 	}
-	return append(out, s[start:])
+	if err := SeedTicketCount(context.Background(), initial); err != nil {
+		log.Printf("[redis] ticket seed skipped: %v", err)
+	}
 }
